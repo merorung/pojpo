@@ -39,47 +39,32 @@ def extract_video_id(url: str) -> str:
 def get_youtube_transcript(video_id: str) -> list:
     """자막을 추출하고 타임스탬프와 함께 반환"""
     try:
-        # 1. 더 많은 언어 옵션 시도
-        languages = ['ko', 'en', 'en-US', 'en-GB', 'auto']
+        # 1차 시도: 한국어
+        try:
+            print("한국어 자막 시도 중...")
+            transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=['ko'])
+            return transcript
+        except Exception as e:
+            print(f"한국어 자막 실패: {str(e)}")
         
-        for lang in languages:
-            try:
-                print(f"언어 '{lang}' 시도 중...")
-                transcript = YouTubeTranscriptApi.get_transcript(
-                    video_id, 
-                    languages=[lang],
-                    proxies=None,  # 프록시 명시적으로 비활성화
-                    cookies=None    # 쿠키 명시적으로 비활성화
-                )
-                print(f"✓ {lang} 자막 추출 성공")
-                return transcript
-            except Exception as e:
-                print(f"'{lang}' 시도 실패: {str(e)}")
-                continue
-                
-        # 2. 마지막 시도: 자동 생성 자막 포함
-        print("자동 생성 자막 시도 중...")
-        transcript = YouTubeTranscriptApi.get_transcript(
-            video_id,
-            languages=['ko', 'en'],
-            proxies=None,
-            cookies=None,
-            preserve_formatting=True  # 원본 형식 유지
-        )
-        print("✓ 자동 자막 추출 성공")
+        # 2차 시도: 영어
+        try:
+            print("영어 자막 시도 중...")
+            transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=['en'])
+            return transcript
+        except Exception as e:
+            print(f"영어 자막 실패: {str(e)}")
+        
+        # 3차 시도: 언어 지정 없이 시도 (자동 자막 포함)
+        print("언어 지정 없이 시도 중...")
+        transcript = YouTubeTranscriptApi.get_transcript(video_id)
+        print("✓ 자막 추출 성공")
         return transcript
                 
     except Exception as e:
         error_msg = str(e)
         print(f"\n=== 자막 추출 최종 실패: {error_msg} ===\n")
-        
-        # 3. 더 자세한 에러 메시지 제공
-        if "Subtitles are disabled" in error_msg:
-            raise Exception("이 동영상은 자막이 비활성화되어 있습니다. (지역 제한 가능성 있음)")
-        elif "Could not find transcripts" in error_msg:
-            raise Exception("이 동영상에서 사용 가능한 자막을 찾을 수 없습니다. (지역 제한 가능성 있음)")
-        else:
-            raise Exception(f"자막 추출 실패 (지역 제한 가능성 있음): {error_msg}")
+        raise Exception(f"자막 추출 실패: {error_msg}")
 
 class TranscriptItem(BaseModel):
     text: str
