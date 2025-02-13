@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel
 from youtube_transcript_api import YouTubeTranscriptApi
+from youtube_transcript_api.formatters import TextFormatter
 import re
 from fastapi.middleware.cors import CORSMiddleware
 import os
@@ -38,24 +39,47 @@ def extract_video_id(url: str) -> str:
 def get_youtube_transcript(video_id: str) -> list:
     """자막을 추출하고 타임스탬프와 함께 반환"""
     try:
-        # 로컬 방식처럼 직접 시도
-        try:
-            transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=['ko'])
-            print("✓ 한국어 자막 추출 성공")
-            return transcript
-        except:
+        # 1. 더 많은 언어 옵션 시도
+        languages = ['ko', 'en', 'en-US', 'en-GB', 'auto']
+        
+        for lang in languages:
             try:
-                transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=['en'])
-                print("✓ 영어 자막 추출 성공")
+                print(f"언어 '{lang}' 시도 중...")
+                transcript = YouTubeTranscriptApi.get_transcript(
+                    video_id, 
+                    languages=[lang],
+                    proxies=None,  # 프록시 명시적으로 비활성화
+                    cookies=None    # 쿠키 명시적으로 비활성화
+                )
+                print(f"✓ {lang} 자막 추출 성공")
                 return transcript
-            except:
-                transcript = YouTubeTranscriptApi.get_transcript(video_id)
-                print("✓ 기본 자막 추출 성공")
-                return transcript
+            except Exception as e:
+                print(f"'{lang}' 시도 실패: {str(e)}")
+                continue
+                
+        # 2. 마지막 시도: 자동 생성 자막 포함
+        print("자동 생성 자막 시도 중...")
+        transcript = YouTubeTranscriptApi.get_transcript(
+            video_id,
+            languages=['ko', 'en'],
+            proxies=None,
+            cookies=None,
+            preserve_formatting=True  # 원본 형식 유지
+        )
+        print("✓ 자동 자막 추출 성공")
+        return transcript
                 
     except Exception as e:
-        print(f"\n=== 자막 추출 실패: {str(e)} ===\n")
-        raise Exception(f"사용 가능한 자막을 찾을 수 없습니다: {str(e)}")
+        error_msg = str(e)
+        print(f"\n=== 자막 추출 최종 실패: {error_msg} ===\n")
+        
+        # 3. 더 자세한 에러 메시지 제공
+        if "Subtitles are disabled" in error_msg:
+            raise Exception("이 동영상은 자막이 비활성화되어 있습니다. (지역 제한 가능성 있음)")
+        elif "Could not find transcripts" in error_msg:
+            raise Exception("이 동영상에서 사용 가능한 자막을 찾을 수 없습니다. (지역 제한 가능성 있음)")
+        else:
+            raise Exception(f"자막 추출 실패 (지역 제한 가능성 있음): {error_msg}")
 
 class TranscriptItem(BaseModel):
     text: str
