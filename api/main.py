@@ -36,39 +36,31 @@ def extract_video_id(url: str) -> str:
 
 def get_youtube_transcript(video_id: str) -> list:
     """자막을 추출하고 타임스탬프와 함께 반환"""
-    transcript = None
-    errors = []
-    
-    print(f"Starting transcript extraction for video ID: {video_id}")
-    
     try:
-        transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
-        
-        # 한국어 자막 시도
+        # 1. 한국어 자막 시도
         try:
-            transcript = transcript_list.find_transcript(['ko']).fetch()
+            transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=['ko'])
             print("한국어 자막 추출 성공")
+            return transcript
         except:
-            try:
-                transcript = transcript_list.find_transcript(['en']).fetch()
-                print("영어 자막 추출 성공")
-            except:
-                try:
-                    transcript = transcript_list.find_generated_transcript(['ko', 'en']).fetch()
-                    print("자동 생성 자막 추출 성공")
-                except Exception as e:
-                    errors.append(str(e))
-                    raise Exception("사용 가능한 자막을 찾을 수 없습니다.")
-    
+            print("한국어 자막 없음, 영어 자막 시도")
+            
+        # 2. 영어 자막 시도
+        try:
+            transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=['en'])
+            print("영어 자막 추출 성공")
+            return transcript
+        except:
+            print("영어 자막 없음, 기본 자막 시도")
+            
+        # 3. 모든 자막 시도
+        transcript = YouTubeTranscriptApi.get_transcript(video_id)
+        print("기본 자막 추출 성공")
+        return transcript
+            
     except Exception as e:
-        print(f"Error: {str(e)}")
-        raise e
-
-    if not transcript:
-        raise Exception("자막을 찾을 수 없습니다.")
-    
-    # transcript는 이미 필요한 형식 (list of dicts with 'text', 'start', 'duration')
-    return transcript
+        print(f"자막 추출 실패: {str(e)}")
+        raise Exception("사용 가능한 자막을 찾을 수 없습니다.")
 
 class TranscriptItem(BaseModel):
     text: str
