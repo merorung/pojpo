@@ -1,4 +1,5 @@
-fastapi
-uvicorn
-youtube-transcript-api
-pydantic
+fastapi==0.68.0
+uvicorn==0.15.0
+youtube-transcript-api==0.6.1
+pydantic==1.8.2
+requests==2.26.0
