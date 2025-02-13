@@ -8,6 +8,14 @@
   ],
   "routes": [
     {
+      "src": "/api/v1/youtube/transcript",
+      "dest": "api/main.py"
+    },
+    {
+      "src": "/transcript",
+      "dest": "api/main.py"
+    },
+    {
       "src": "/(.*)",
       "dest": "api/main.py"
     }
