@@ -47,51 +47,47 @@ def get_youtube_transcript(video_id: str) -> list:
     print(f"실행 위치: {os.getcwd()}")
     print(f"환경 변수: {dict(os.environ)}")
     print("=====================\n")
-
+    
     try:
-        # 트랜스크립트 목록 확인
+        transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+        print(f"사용 가능한 자막 목록: {transcript_list.manual_generated_transcripts}")
+        print(f"자동 생성 자막 목록: {transcript_list.generated_transcripts}")
+        
+        # 자동 생성 자막 먼저 시도
         try:
-            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
-            print(f"사용 가능한 자막 목록: {transcript_list.manual_generated_transcripts}")
-            print(f"자동 생성 자막 목록: {transcript_list.generated_transcripts}")
+            transcript = transcript_list.find_generated_transcript(['ko', 'en'])
+            return transcript.fetch()
         except Exception as e:
-            print(f"자막 목록 조회 실패: {str(e)}")
-
-        # 기존 로직
+            print(f"자동 생성 자막 가져오기 실패: {str(e)}")
+            # 수동 자막 시도
+            try:
+                transcript = transcript_list.find_manually_created_transcript(['ko', 'en'])
+                return transcript.fetch()
+            except Exception as e:
+                print(f"수동 자막 가져오기 실패: {str(e)}")
+        
+        # 위 방법들이 실패하면 기본 방식으로 시도
+        print("기본 방식으로 자막 추출 시도...")
         try:
-            print("한국어 자막 시도 중...")
             transcript = YouTubeTranscriptApi.get_transcript(
-                video_id, 
-                languages=['ko'],
-                preserve_formatting=True
+                video_id,
+                languages=['ko', 'en'],
+                preserve_formatting=False
             )
             return transcript
         except Exception as e:
-            print(f"한국어 자막 실패: {str(e)}")
-        
-        try:
-            print("영어 자막 시도 중...")
+            print(f"기본 방식 자막 추출 실패: {str(e)}")
+            # 언어 지정 없이 마지막 시도
             transcript = YouTubeTranscriptApi.get_transcript(
-                video_id, 
-                languages=['en'],
-                preserve_formatting=True
+                video_id,
+                preserve_formatting=False
             )
             return transcript
-        except Exception as e:
-            print(f"영어 자막 실패: {str(e)}")
-        
-        print("언어 지정 없이 시도 중...")
-        transcript = YouTubeTranscriptApi.get_transcript(
-            video_id,
-            preserve_formatting=True
-        )
-        print("✓ 자막 추출 성공")
-        return transcript
                 
     except Exception as e:
         error_msg = str(e)
         print(f"\n=== 자막 추출 최종 실패: {error_msg} ===\n")
-        raise Exception(f"자막 추출 실패 (Vercel 환경): {error_msg}")
+        raise Exception(f"자막 추출 실패: {error_msg}")
 
 class TranscriptItem(BaseModel):
     text: str
@@ -160,5 +156,3 @@ async def gpt_transcript(videoId: str = Query(..., description="YouTube 비디�
             error_message = "이 동영상에서 사용 가능한 자막을 찾을 수 없습니다."
         raise HTTPException(status_code=404 if "찾을 수 없습니다" in error_message else 500, 
                           detail=error_message)
-
-# Vercel은 파일 내에서 "app"이라는 변수를 엔트리 포인트로 인식합니다.
