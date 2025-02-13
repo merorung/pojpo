@@ -20,7 +20,7 @@ app.add_middleware(
 )
 
 def extract_video_id(url: str) -> str:
-    """여러 가지 YouTube URL 포맷에서 video ID 추출"""
+    """Extract video ID from various YouTube URL formats"""
     patterns = [
         r'v=([a-zA-Z0-9_-]{11})',
         r'youtu\.be/([a-zA-Z0-9_-]{11})',
@@ -34,45 +34,27 @@ def extract_video_id(url: str) -> str:
             return match.group(1)
     return None
 
-def get_youtube_transcript(video_id: str) -> list:
-    """자막을 추출하고 반환"""
-    print(f"\n=== 자막 추출 시작: {video_id} ===")
-    
+def get_youtube_transcript(video_id: str) -> str:
+    """Get transcript and format as continuous text"""
     try:
-        # 1. 한국어 자막 시도
+        transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=['ko'])
+    except:
         try:
-            print("한국어 자막 시도 중...")
-            transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=['ko'])
-            print("한국어 자막 추출 성공")
-            return transcript
+            transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=['en'])
         except:
-            print("한국어 자막 실패, 영어 자막 시도")
-            
-            # 2. 영어 자막 시도
-            try:
-                print("영어 자막 시도 중...")
-                transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=['en'])
-                print("영어 자막 추출 성공")
-                return transcript
-            except:
-                print("영어 자막 실패, 기본 자막 시도")
-                
-                # 3. 모든 자막 시도
-                transcript = YouTubeTranscriptApi.get_transcript(video_id)
-                print("기본 자막 추출 성공")
-                return transcript
-                
-    except Exception as e:
-        print(f"=== 자막 추출 실패: {str(e)} ===")
-        raise Exception(f"자막을 찾을 수 없습니다: {str(e)}")
-
-class TranscriptItem(BaseModel):
-    text: str
-    start: float
-    duration: float
+            transcript = YouTubeTranscriptApi.get_transcript(video_id)
+    
+    # 모든 자막 텍스트를 하나의 문자열로 합치기
+    full_text = ' '.join(entry['text'] for entry in transcript)
+    
+    # 불필요한 여러 개의 공백을 하나로 치환
+    full_text = re.sub(r'\s+', ' ', full_text)
+    
+    return full_text.strip()
 
 class TranscriptResponse(BaseModel):
-    transcript: list[TranscriptItem]
+    video_id: str
+    transcript: str
 
 @app.get("/")
 async def root():
@@ -81,28 +63,6 @@ async def root():
         "docs_url": "/docs"
     }
 
-@app.get("/transcript", response_model=TranscriptResponse)
-async def transcript(url: str = Query(..., description="YouTube 동영상 URL")):
-    video_id = extract_video_id(url)
-    if not video_id:
-        raise HTTPException(status_code=400, detail="올바르지 않은 YouTube URL입니다.")
-    
-    try:
-        transcript_list = get_youtube_transcript(video_id)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"자막을 가져오는 중 오류 발생: {str(e)}")
-    
-    # 응답 형식에 맞게 변환
-    transcript_items = [
-        TranscriptItem(
-            text=item['text'],
-            start=item['start'],
-            duration=item['duration']
-        ) for item in transcript_list
-    ]
-    
-    return TranscriptResponse(transcript=transcript_items)
-
 @app.get("/api/v1/youtube/transcript", response_model=TranscriptResponse)
 async def gpt_transcript(videoId: str = Query(..., description="YouTube 비디오 ID")):
     if not videoId:
@@ -110,22 +70,12 @@ async def gpt_transcript(videoId: str = Query(..., description="YouTube 비디�
     
     try:
         print(f"API 호출 받음 - videoId: {videoId}")
-        transcript_list = get_youtube_transcript(videoId)
-        
-        # 응답 형식에 맞게 변환
-        transcript_items = [
-            TranscriptItem(
-                text=item['text'],
-                start=item['start'],
-                duration=item['duration']
-            ) for item in transcript_list
-        ]
-        
-        return TranscriptResponse(transcript=transcript_items)
-    
+        transcript_text = get_youtube_transcript(videoId)
+        print(f"자막 추출 성공 - 첫 100자: {transcript_text[:100]}...")
+        return TranscriptResponse(video_id=videoId, transcript=transcript_text)
     except Exception as e:
+        print(f"에러 발생: {str(e)}")
         error_message = str(e)
-        print(f"에러 발생: {error_message}")
         if "Subtitles are disabled" in error_message:
             error_message = "이 동영상은 자막이 비활성화되어 있습니다."
         elif "Could not find transcripts" in error_message:
