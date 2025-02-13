@@ -5,6 +5,8 @@ from youtube_transcript_api.formatters import TextFormatter
 import re
 from fastapi.middleware.cors import CORSMiddleware
 import os
+import sys
+import platform
 
 app = FastAPI(
     title="YouTube Transcript API",
@@ -38,33 +40,58 @@ def extract_video_id(url: str) -> str:
 
 def get_youtube_transcript(video_id: str) -> list:
     """자막을 추출하고 타임스탬프와 함께 반환"""
+    # 환경 정보 출력
+    print("\n=== 실행 환경 정보 ===")
+    print(f"Python 버전: {sys.version}")
+    print(f"플랫폼: {platform.platform()}")
+    print(f"실행 위치: {os.getcwd()}")
+    print(f"환경 변수: {dict(os.environ)}")
+    print("=====================\n")
+
     try:
-        # 1차 시도: 한국어
+        # 트랜스크립트 목록 확인
+        try:
+            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+            print(f"사용 가능한 자막 목록: {transcript_list.manual_generated_transcripts}")
+            print(f"자동 생성 자막 목록: {transcript_list.generated_transcripts}")
+        except Exception as e:
+            print(f"자막 목록 조회 실패: {str(e)}")
+
+        # 기존 로직
         try:
             print("한국어 자막 시도 중...")
-            transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=['ko'])
+            transcript = YouTubeTranscriptApi.get_transcript(
+                video_id, 
+                languages=['ko'],
+                preserve_formatting=True
+            )
             return transcript
         except Exception as e:
             print(f"한국어 자막 실패: {str(e)}")
         
-        # 2차 시도: 영어
         try:
             print("영어 자막 시도 중...")
-            transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=['en'])
+            transcript = YouTubeTranscriptApi.get_transcript(
+                video_id, 
+                languages=['en'],
+                preserve_formatting=True
+            )
             return transcript
         except Exception as e:
             print(f"영어 자막 실패: {str(e)}")
         
-        # 3차 시도: 언어 지정 없이 시도 (자동 자막 포함)
         print("언어 지정 없이 시도 중...")
-        transcript = YouTubeTranscriptApi.get_transcript(video_id)
+        transcript = YouTubeTranscriptApi.get_transcript(
+            video_id,
+            preserve_formatting=True
+        )
         print("✓ 자막 추출 성공")
         return transcript
                 
     except Exception as e:
         error_msg = str(e)
         print(f"\n=== 자막 추출 최종 실패: {error_msg} ===\n")
-        raise Exception(f"자막 추출 실패: {error_msg}")
+        raise Exception(f"자막 추출 실패 (Vercel 환경): {error_msg}")
 
 class TranscriptItem(BaseModel):
     text: str
