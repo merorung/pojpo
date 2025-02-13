@@ -37,27 +37,47 @@ def extract_video_id(url: str) -> str:
 def get_youtube_transcript(video_id: str) -> str:
     """자막을 추출하고 연속된 텍스트로 포맷"""
     transcript = None
+    errors = []
     
-    # 한국어 자막 시도
+    # 1. 한국어 자막 시도 (자동 생성 포함)
     try:
-        transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=['ko'])
+        transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=['ko'], preserve_formatting=True)
+        print("한국어 자막 추출 성공")
     except Exception as ko_error:
-        print(f"한국어 자막 추출 실패: {str(ko_error)}")
+        errors.append(f"한국어 자막 실패: {str(ko_error)}")
         
-        # 영어 자막 시도
+        # 2. 영어 자막 시도 (자동 생성 포함)
         try:
-            transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=['en'])
+            transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=['en'], preserve_formatting=True)
+            print("영어 자막 추출 성공")
         except Exception as en_error:
-            print(f"영어 자막 추출 실패: {str(en_error)}")
+            errors.append(f"영어 자막 실패: {str(en_error)}")
             
-            # 모든 언어 자막 시도
+            # 3. 자동 생성된 자막 포함하여 모든 언어 시도
             try:
-                transcript = YouTubeTranscriptApi.get_transcript(video_id)
+                transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+                
+                # 수동 자막 먼저 시도
+                try:
+                    transcript = transcript_list.find_manually_created_transcript().fetch()
+                    print("수동 생성 자막 추출 성공")
+                except:
+                    # 자동 생성 자막 시도
+                    try:
+                        transcript = transcript_list.find_generated_transcript(['ko', 'en']).fetch()
+                        print("자동 생성 자막 추출 성공")
+                    except Exception as auto_error:
+                        errors.append(f"자동 생성 자막 실패: {str(auto_error)}")
+                        # 마지막으로 가능한 아무 자막이나 시도
+                        transcript = transcript_list.find_transcript(['ko', 'en']).fetch()
+                        
             except Exception as final_error:
-                print(f"모든 자막 추출 실패: {str(final_error)}")
-                raise final_error
+                errors.append(f"모든 자막 추출 실패: {str(final_error)}")
+                print("\n".join(errors))  # 모든 에러 로그 출력
+                raise Exception("사용 가능한 자막을 찾을 수 없습니다. (자동 생성 자막 포함)")
     
     if not transcript:
+        print("\n".join(errors))
         raise Exception("자막을 찾을 수 없습니다.")
         
     # 모든 자막 텍스트를 하나의 문자열로 합치기
