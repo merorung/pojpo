@@ -73,4 +73,19 @@ async def transcript(url: str = Query(..., description="YouTube 동영상 URL"))
     
     return TranscriptResponse(video_id=video_id, transcript=transcript_text)
 
+@app.get("/api/v1/youtube/transcript", response_model=TranscriptResponse)
+async def gpt_transcript(videoId: str = Query(..., description="YouTube 비디오 ID")):
+    if not videoId:
+        raise HTTPException(status_code=400, detail="videoId가 필요합니다.")
+    
+    try:
+        # 디버깅을 위한 로그 추가
+        print(f"Received videoId: {videoId}")
+        transcript_text = get_youtube_transcript(videoId)
+        print(f"Got transcript: {transcript_text[:100]}...")  # 처음 100자만 로그로 출력
+        return TranscriptResponse(video_id=videoId, transcript=transcript_text)
+    except Exception as e:
+        print(f"Error occurred: {str(e)}")  # 에러 로그 추가
+        raise HTTPException(status_code=500, detail=f"자막을 가져오는 중 오류 발생: {str(e)}")
+
 # Vercel은 파일 내에서 "app"이라는 변수를 엔트리 포인트로 인식합니다.
