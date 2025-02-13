@@ -37,30 +37,51 @@ def extract_video_id(url: str) -> str:
 def get_youtube_transcript(video_id: str) -> list:
     """자막을 추출하고 타임스탬프와 함께 반환"""
     try:
-        # 1. 한국어 자막 시도
+        # 1. 한국어 자막 시도 (자동 생성 포함)
         try:
-            transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=['ko'])
+            transcript = YouTubeTranscriptApi.get_transcript(
+                video_id, 
+                languages=['ko'],
+                preserve_formatting=True,
+                languages_and_auto_generated=['ko', 'ko-generated']
+            )
             print("한국어 자막 추출 성공")
             return transcript
-        except:
-            print("한국어 자막 없음, 영어 자막 시도")
+        except Exception as ko_error:
+            print(f"한국어 자막 실패: {str(ko_error)}")
             
-        # 2. 영어 자막 시도
+        # 2. 영어 자막 시도 (자동 생성 포함)
         try:
-            transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=['en'])
+            transcript = YouTubeTranscriptApi.get_transcript(
+                video_id, 
+                languages=['en'],
+                preserve_formatting=True,
+                languages_and_auto_generated=['en', 'en-generated']
+            )
             print("영어 자막 추출 성공")
             return transcript
-        except:
-            print("영어 자막 없음, 기본 자막 시도")
+        except Exception as en_error:
+            print(f"영어 자막 실패: {str(en_error)}")
             
-        # 3. 모든 자막 시도
-        transcript = YouTubeTranscriptApi.get_transcript(video_id)
-        print("기본 자막 추출 성공")
-        return transcript
+        # 3. 모든 가능한 자막 시도
+        try:
+            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+            available = transcript_list.find_generated_transcript()
+            transcript = available.fetch()
+            print("자동 생성 자막 추출 성공")
+            return transcript
+        except:
+            # 마지막 시도
+            transcript = YouTubeTranscriptApi.get_transcript(
+                video_id,
+                preserve_formatting=True
+            )
+            print("기본 자막 추출 성공")
+            return transcript
             
     except Exception as e:
         print(f"자막 추출 실패: {str(e)}")
-        raise Exception("사용 가능한 자막을 찾을 수 없습니다.")
+        raise Exception(f"사용 가능한 자막을 찾을 수 없습니다: {str(e)}")
 
 class TranscriptItem(BaseModel):
     text: str
